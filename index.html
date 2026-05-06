@@ -8,7 +8,7 @@
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;900&display=swap');
         * { box-sizing: border-box; user-select: none; -webkit-tap-highlight-color: transparent; }
-        body { margin: 0; height: 100vh; display: flex; justify-content: center; align-items: center; background: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%); font-family: 'Montserrat', sans-serif; overflow: hidden; transition: background 0.2s; touch-action: none; }
+        body { margin: 0; height: 100vh; display: flex; justify-content: center; align-items: center; background: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%); font-family: 'Montserrat', sans-serif; overflow: hidden; transition: background 0.5s ease; touch-action: none; }
         body.danger { background: linear-gradient(135deg, #ff4b2b 0%, #ff416c 100%); }
         .device-container { position: relative; width: 90vw; max-width: 380px; height: 85vh; max-height: 700px; }
         .antenna { position: absolute; width: 6px; height: 15%; background: #333; top: -12%; right: 50px; border-radius: 3px; z-index: 1; }
@@ -18,14 +18,14 @@
         .header { background: #111; padding: 12px; border-radius: 12px; text-align: center; color: #fff; font-size: clamp(16px, 5vw, 22px); font-weight: 900; margin-bottom: 8px; }
         .version { text-align: center; color: #666; font-size: 10px; margin-bottom: 15px; font-weight: 700; }
         .drone-box { background: #111; border-radius: 15px; height: 100px; display: flex; justify-content: center; align-items: center; margin-bottom: 15px; box-shadow: inset 0 2px 10px rgba(0,0,0,0.8); }
-        .drone-svg { width: 80px; fill: #444; transition: 0.2s; }
+        .drone-svg { width: 80px; fill: #444; transition: fill 0.3s; }
         body.danger .drone-svg { fill: #ff2a2a; animation: shake 0.2s infinite; }
         .scale-box { background: #111; border-radius: 15px; padding: 15px; margin-bottom: 15px; flex-grow: 1; display: flex; flex-direction: column; justify-content: space-between; }
         .led-container { display: flex; justify-content: space-between; align-items: center; height: 80px; padding: 0 5px; }
-        .led { width: 4%; min-width: 8px; background: #222; border-radius: 4px; transition: height 0.3s ease-out, background 0.1s; }
+        .led { width: 4%; min-width: 8px; background: #222; border-radius: 4px; transition: height 0.15s ease-out, background 0.1s; }
         .bottom-row { display: flex; justify-content: space-between; height: 110px; }
         .info-box { background: #111; border-radius: 15px; width: 55%; padding: 12px; display: flex; flex-direction: column; justify-content: space-between; }
-        .main-number { color: #fff; font-size: clamp(30px, 10vw, 45px); font-weight: 900; text-align: center; }
+        .main-number { color: #fff; font-size: clamp(30px, 10vw, 45px); font-weight: 900; text-align: center; transition: color 0.3s; }
         body.danger .main-number { color: #ff2a2a; }
         .btn-group { width: 40%; display: flex; flex-direction: column; justify-content: space-between; }
         .btn { background: #333; color: #fff; border: none; padding: 12px; border-radius: 12px; font-size: 12px; font-weight: 700; text-align: center; box-shadow: 0 4px 0 #111; cursor: pointer; pointer-events: auto; z-index: 10; }
@@ -93,12 +93,14 @@
 
         let audioCtx, oscillator, gainNode, sirenInt;
         let isActive = false;
+        let isAudioUnlocked = false;
         let modes = ['SPACE', 'RANDOM', 'TURBO'];
         let currentMode = 0;
         let leds = [];
         let currentDist = 80;
+        let randomTimer = null;
 
-        // Создание шкалы
+        // Инициализация шкалы
         for (let i = 0; i < 18; i++) {
             let led = document.createElement('div');
             led.classList.add('led');
@@ -107,20 +109,32 @@
             leds.push(led);
         }
 
-        function updateUI() {
-            // Динамическая высота полосок: чем меньше дистанция, тем выше полоски
-            // (100 - currentDist) дает значение от 0 до 100
-            let scaleFactor = (100 - currentDist) / 100;
+        // Разблокировка Audio API для мобильных устройств при первом касании
+        function unlockAudio() {
+            if (isAudioUnlocked) return;
+            isAudioUnlocked = true;
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
             
+            // "Пустой" голос для разблокировки TTS на iOS
+            let msg = new SpeechSynthesisUtterance('');
+            msg.volume = 0;
+            window.speechSynthesis.speak(msg);
+            
+            document.removeEventListener('touchstart', unlockAudio);
+            document.removeEventListener('mousedown', unlockAudio);
+        }
+        document.addEventListener('touchstart', unlockAudio, {once: true});
+        document.addEventListener('mousedown', unlockAudio, {once: true});
+
+        function updateUI() {
+            let scaleFactor = (100 - currentDist) / 100;
             leds.forEach((l, i) => {
-                // Если тревога - горят все. Если нет - только часть.
                 let shouldBeActive = isActive || (i < (scaleFactor * 18) + 3);
-                
                 if (shouldBeActive) {
                     let color = i < 7 ? '#0f0' : i < 13 ? '#ff0' : '#f00';
                     l.style.background = color;
                     l.style.boxShadow = `0 0 8px ${color}`;
-                    // Высота зависит от дистанции + небольшая волна для красоты
                     let h = 20 + (scaleFactor * 50) + Math.sin(i + Date.now()/200)*5;
                     l.style.height = Math.min(h, 80) + 'px';
                 } else {
@@ -141,64 +155,126 @@
             updateUI();
         }, 150);
 
-        // КНОПКИ: Исключаем срабатывание сирены при клике на выбор режима
+        // Управление режимами
         modeBtn.addEventListener('mousedown', (e) => e.stopPropagation());
         modeBtn.addEventListener('touchstart', (e) => e.stopPropagation());
-        modeBtn.onclick = (e) => {
+        modeBtn.onclick = () => {
             stopAll();
             currentMode = (currentMode + 1) % modes.length;
             modeDisplay.innerText = modes[currentMode];
             if (modes[currentMode] === 'RANDOM') runRandom();
-            if (modes[currentMode] === 'TURBO') { isActive = true; playCycle(); }
+            if (modes[currentMode] === 'TURBO') { isActive = true; runCycle(); }
         };
 
         settingsBtn.addEventListener('touchstart', (e) => e.stopPropagation());
         settingsBtn.addEventListener('mousedown', (e) => e.stopPropagation());
 
-        async function playCycle() {
+        // Главный цикл анимации угрозы
+        async function runCycle() {
             if (!isActive) return;
+
             document.body.classList.add('danger');
             statusLabel.innerText = "УГРОЗА!";
             statusIcon.innerText = "🚨";
-            currentDist = 0;
-            distanceEl.innerText = "0";
-            
             if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('error');
 
             startSiren();
-            await new Promise(r => setTimeout(r, 3000));
-            stopSiren();
 
-            if (isActive) {
-                const msg = new SpeechSynthesisUtterance("Шахед уже над твоим домом");
-                msg.lang = "ru-RU";
-                window.speechSynthesis.speak(msg);
-                await new Promise(r => { msg.onend = r; });
+            // Плавное снижение дистанции
+            let tempDist = currentDist > 0 ? currentDist : 80;
+            while (tempDist > 0 && isActive) {
+                tempDist -= 2; // Скорость приближения
+                if (tempDist < 0) tempDist = 0;
+                currentDist = tempDist;
+                distanceEl.innerText = Math.floor(tempDist);
+                await new Promise(r => setTimeout(r, 40));
             }
 
-            if (isActive) playCycle();
+            if (!isActive) return;
+            
+            // Пауза на нуле (сирена продолжает выть)
+            await new Promise(r => setTimeout(r, 1200));
+            if (!isActive) return;
+
+            // Выключаем сирену и говорим текст
+            stopSiren();
+            await speakText("Шахед уже над твоим домом");
+
+            // Перезапуск цикла, если всё ещё активен (например, в TURBO или удержании SPACE)
+            if (isActive) {
+                currentDist = 80;
+                runCycle();
+            }
+        }
+
+        // Надежная функция речи с предохранителем
+        function speakText(text) {
+            return new Promise(resolve => {
+                let finished = false;
+                const done = () => {
+                    if (!finished) {
+                        finished = true;
+                        resolve();
+                    }
+                };
+
+                // Отменяем старые фразы
+                window.speechSynthesis.cancel();
+                
+                const msg = new SpeechSynthesisUtterance(text);
+                msg.lang = "ru-RU";
+                msg.onend = done;
+                msg.onerror = done;
+                
+                window.speechSynthesis.speak(msg);
+
+                // Предохранитель (если телефон заглючит и не отдаст onend)
+                setTimeout(done, 3500);
+            });
         }
 
         function startSiren() {
-            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (!audioCtx) unlockAudio();
             if (audioCtx.state === 'suspended') audioCtx.resume();
+            if (oscillator) return; // Уже играет
+
             oscillator = audioCtx.createOscillator();
             gainNode = audioCtx.createGain();
             oscillator.type = 'sawtooth';
             oscillator.connect(gainNode);
             gainNode.connect(audioCtx.destination);
+            
+            // Плавное нарастание звука
+            gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+            gainNode.gain.linearRampToValueAtTime(1, audioCtx.currentTime + 0.5);
+
             oscillator.start();
+
             let f = 350; let up = true;
             sirenInt = setInterval(() => {
                 f = up ? f + 25 : f - 25;
                 if (f > 850) up = false; if (f < 350) up = true;
-                oscillator.frequency.setValueAtTime(f, audioCtx.currentTime);
+                if(oscillator) oscillator.frequency.setValueAtTime(f, audioCtx.currentTime);
             }, 20);
         }
 
         function stopSiren() {
-            if (oscillator) { oscillator.stop(); oscillator.disconnect(); oscillator = null; }
             clearInterval(sirenInt);
+            if (gainNode && audioCtx) {
+                // Плавное затухание
+                gainNode.gain.cancelScheduledValues(audioCtx.currentTime);
+                gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.3);
+                setTimeout(() => {
+                    if (oscillator) {
+                        oscillator.stop();
+                        oscillator.disconnect();
+                        oscillator = null;
+                    }
+                }, 350);
+            } else if (oscillator) {
+                oscillator.stop();
+                oscillator = null;
+            }
         }
 
         function stopAll() {
@@ -207,29 +283,43 @@
             statusLabel.innerText = "СКАНИРОВАНИЕ";
             window.speechSynthesis.cancel();
             stopSiren();
-            clearTimeout(this.rt);
+            clearTimeout(randomTimer);
         }
 
-        // РЕАКЦИЯ НА ЗАЖАТИЕ (Только если режим SPACE)
+        // Обработка касаний (с предотвращением стандартных действий мобильного браузера)
         const triggerStart = (e) => {
+            if(e.type === 'touchstart') e.preventDefault();
             if (modes[currentMode] === 'SPACE' && !isActive) {
-                isActive = true; playCycle();
+                isActive = true;
+                runCycle();
             }
         };
-        const triggerEnd = () => { if (modes[currentMode] === 'SPACE') stopAll(); };
 
-        touchZone.addEventListener('touchstart', triggerStart);
-        touchZone.addEventListener('touchend', triggerEnd);
+        const triggerEnd = (e) => {
+            if (e && e.type !== 'mouseup') e.preventDefault();
+            if (modes[currentMode] === 'SPACE') stopAll();
+        };
+
+        touchZone.addEventListener('touchstart', triggerStart, {passive: false});
+        touchZone.addEventListener('touchend', triggerEnd, {passive: false});
+        touchZone.addEventListener('touchcancel', triggerEnd, {passive: false}); // Важно для телефонов!
         touchZone.addEventListener('mousedown', triggerStart);
-        touchZone.addEventListener('mouseup', triggerEnd);
-        window.addEventListener('keydown', (e) => { if (e.code === 'Space') triggerStart(); });
-        window.addEventListener('keyup', (e) => { if (e.code === 'Space') triggerEnd(); });
+        window.addEventListener('mouseup', triggerEnd); // Ловим отпускание везде
+        
+        window.addEventListener('keydown', (e) => { if (e.code === 'Space' && !e.repeat) triggerStart(e); });
+        window.addEventListener('keyup', (e) => { if (e.code === 'Space') triggerEnd(e); });
 
         function runRandom() {
             if (modes[currentMode] !== 'RANDOM') return;
-            this.rt = setTimeout(() => {
+            randomTimer = setTimeout(() => {
                 isActive = true;
-                playCycle().then(() => { if (modes[currentMode] === 'RANDOM') { isActive = false; stopAll(); runRandom(); }});
+                runCycle().then(() => {
+                    if (modes[currentMode] === 'RANDOM') {
+                        isActive = false;
+                        stopAll();
+                        runRandom();
+                    }
+                });
             }, Math.random() * 5000 + 4000);
         }
     </script>
