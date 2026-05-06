@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ШАХЕДОМЕТР v2.7</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;900&display=swap');
+        * { box-sizing: border-box; user-select: none; -webkit-tap-highlight-color: transparent; }
+        body { margin: 0; height: 100vh; display: flex; justify-content: center; align-items: center; background: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%); font-family: 'Montserrat', sans-serif; overflow: hidden; transition: background 0.2s; touch-action: none; }
+        body.danger { background: linear-gradient(135deg, #ff4b2b 0%, #ff416c 100%); }
+        .device-container { position: relative; width: 90vw; max-width: 380px; height: 85vh; max-height: 700px; }
+        .antenna { position: absolute; width: 6px; height: 15%; background: #333; top: -12%; right: 50px; border-radius: 3px; z-index: 1; }
+        .device { position: relative; width: 100%; height: 100%; background: #1e1e1e; border-radius: 30px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); padding: 20px; display: flex; flex-direction: column; z-index: 2; border: 2px solid #2a2a2a; }
+        .screw { position: absolute; width: 8px; height: 8px; background: #111; border-radius: 50%; }
+        .s-tl { top: 15px; left: 15px; } .s-tr { top: 15px; right: 15px; } .s-bl { bottom: 15px; left: 15px; } .s-br { bottom: 15px; right: 15px; }
+        .header { background: #111; padding: 12px; border-radius: 12px; text-align: center; color: #fff; font-size: clamp(16px, 5vw, 22px); font-weight: 900; margin-bottom: 8px; }
+        .version { text-align: center; color: #666; font-size: 10px; margin-bottom: 15px; font-weight: 700; }
+        .drone-box { background: #111; border-radius: 15px; height: 100px; display: flex; justify-content: center; align-items: center; margin-bottom: 15px; box-shadow: inset 0 2px 10px rgba(0,0,0,0.8); }
+        .drone-svg { width: 80px; fill: #444; transition: 0.2s; }
+        body.danger .drone-svg { fill: #ff2a2a; animation: shake 0.2s infinite; }
+        .scale-box { background: #111; border-radius: 15px; padding: 15px; margin-bottom: 15px; flex-grow: 1; display: flex; flex-direction: column; justify-content: space-between; }
+        .led-container { display: flex; justify-content: space-between; align-items: center; height: 80px; padding: 0 5px; }
+        .led { width: 4%; min-width: 8px; background: #222; border-radius: 4px; transition: height 0.3s ease-out, background 0.1s; }
+        .bottom-row { display: flex; justify-content: space-between; height: 110px; }
+        .info-box { background: #111; border-radius: 15px; width: 55%; padding: 12px; display: flex; flex-direction: column; justify-content: space-between; }
+        .main-number { color: #fff; font-size: clamp(30px, 10vw, 45px); font-weight: 900; text-align: center; }
+        body.danger .main-number { color: #ff2a2a; }
+        .btn-group { width: 40%; display: flex; flex-direction: column; justify-content: space-between; }
+        .btn { background: #333; color: #fff; border: none; padding: 12px; border-radius: 12px; font-size: 12px; font-weight: 700; text-align: center; box-shadow: 0 4px 0 #111; cursor: pointer; pointer-events: auto; z-index: 10; }
+        .btn:active { transform: translateY(2px); box-shadow: 0 2px 0 #111; background: #444; }
+        .mode-text { color: #00ff00; font-size: 10px; text-align: center; font-weight: bold; margin-top: 4px; }
+        @keyframes shake { 0% { transform: translate(1px, 1px); } 50% { transform: translate(-1px, -1px); } 100% { transform: translate(1px, 1px); } }
+    </style>
+</head>
+<body>
+
+    <div class="device-container" id="touch-zone">
+        <div class="antenna"></div>
+        <div class="device">
+            <div class="screw s-tl"></div><div class="screw s-tr"></div>
+            <div class="screw s-bl"></div><div class="screw s-br"></div>
+
+            <div class="header">🇺🇦 ШАХЕДОМЕТР</div>
+            <div class="version">ШМ-v2.7 | BY ANANASIK</div>
+
+            <div class="drone-box">
+                <svg class="drone-svg" viewBox="0 0 100 50">
+                    <path d="M50,10 L45,25 L10,35 L10,40 L45,35 L50,45 L55,35 L90,40 L90,35 L55,25 Z" />
+                </svg>
+            </div>
+
+            <div class="scale-box">
+                <div style="color:#888; font-size:10px; display: flex; justify-content: space-between; margin-bottom: 5px;">
+                    <span id="status-label">СКАНИРОВАНИЕ</span>
+                    <span id="status-icon">🛰️</span>
+                </div>
+                <div class="led-container" id="leds"></div>
+                <div style="display: flex; justify-content: space-between; color: #444; font-size: 8px; margin-top: 5px;">
+                    <span>MIN</span>
+                    <span>MAX</span>
+                </div>
+            </div>
+
+            <div class="bottom-row">
+                <div class="info-box">
+                    <span style="color:#888; font-size:9px;">ДИСТАНЦИЯ (КМ)</span>
+                    <div class="main-number" id="distance">--</div>
+                    <div style="color:#444; font-size:8px;">PRO-RADAR SYSTEM</div>
+                </div>
+                <div class="btn-group">
+                    <div class="btn" id="mode-btn">ОБРАТИ</div>
+                    <div class="mode-text" id="mode-display">SPACE</div>
+                    <div class="btn" id="settings-btn" style="padding:8px; background:#222;">⚙</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+
+        const ledsContainer = document.getElementById('leds');
+        const distanceEl = document.getElementById('distance');
+        const modeDisplay = document.getElementById('mode-display');
+        const statusLabel = document.getElementById('status-label');
+        const statusIcon = document.getElementById('status-icon');
+        const modeBtn = document.getElementById('mode-btn');
+        const settingsBtn = document.getElementById('settings-btn');
+        const touchZone = document.getElementById('touch-zone');
+
+        let audioCtx, oscillator, gainNode, sirenInt;
+        let isActive = false;
+        let modes = ['SPACE', 'RANDOM', 'TURBO'];
+        let currentMode = 0;
+        let leds = [];
+        let currentDist = 80;
+
+        // Создание шкалы
+        for (let i = 0; i < 18; i++) {
+            let led = document.createElement('div');
+            led.classList.add('led');
+            led.style.height = '15px';
+            ledsContainer.appendChild(led);
+            leds.push(led);
+        }
+
+        function updateUI() {
+            // Динамическая высота полосок: чем меньше дистанция, тем выше полоски
+            // (100 - currentDist) дает значение от 0 до 100
+            let scaleFactor = (100 - currentDist) / 100;
+            
+            leds.forEach((l, i) => {
+                // Если тревога - горят все. Если нет - только часть.
+                let shouldBeActive = isActive || (i < (scaleFactor * 18) + 3);
+                
+                if (shouldBeActive) {
+                    let color = i < 7 ? '#0f0' : i < 13 ? '#ff0' : '#f00';
+                    l.style.background = color;
+                    l.style.boxShadow = `0 0 8px ${color}`;
+                    // Высота зависит от дистанции + небольшая волна для красоты
+                    let h = 20 + (scaleFactor * 50) + Math.sin(i + Date.now()/200)*5;
+                    l.style.height = Math.min(h, 80) + 'px';
+                } else {
+                    l.style.background = '#222';
+                    l.style.boxShadow = 'none';
+                    l.style.height = '10px';
+                }
+            });
+        }
+
+        // Анимация сканирования (Idle)
+        setInterval(() => {
+            if (!isActive) {
+                currentDist = 70 + Math.floor(Math.random() * 25);
+                distanceEl.innerText = currentDist;
+                statusIcon.innerText = Math.random() > 0.5 ? "📡" : "🛰️";
+            }
+            updateUI();
+        }, 150);
+
+        // КНОПКИ: Исключаем срабатывание сирены при клике на выбор режима
+        modeBtn.addEventListener('mousedown', (e) => e.stopPropagation());
+        modeBtn.addEventListener('touchstart', (e) => e.stopPropagation());
+        modeBtn.onclick = (e) => {
+            stopAll();
+            currentMode = (currentMode + 1) % modes.length;
+            modeDisplay.innerText = modes[currentMode];
+            if (modes[currentMode] === 'RANDOM') runRandom();
+            if (modes[currentMode] === 'TURBO') { isActive = true; playCycle(); }
+        };
+
+        settingsBtn.addEventListener('touchstart', (e) => e.stopPropagation());
+        settingsBtn.addEventListener('mousedown', (e) => e.stopPropagation());
+
+        async function playCycle() {
+            if (!isActive) return;
+            document.body.classList.add('danger');
+            statusLabel.innerText = "УГРОЗА!";
+            statusIcon.innerText = "🚨";
+            currentDist = 0;
+            distanceEl.innerText = "0";
+            
+            if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('error');
+
+            startSiren();
+            await new Promise(r => setTimeout(r, 3000));
+            stopSiren();
+
+            if (isActive) {
+                const msg = new SpeechSynthesisUtterance("Шахед уже над твоим домом");
+                msg.lang = "ru-RU";
+                window.speechSynthesis.speak(msg);
+                await new Promise(r => { msg.onend = r; });
+            }
+
+            if (isActive) playCycle();
+        }
+
+        function startSiren() {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            oscillator = audioCtx.createOscillator();
+            gainNode = audioCtx.createGain();
+            oscillator.type = 'sawtooth';
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            oscillator.start();
+            let f = 350; let up = true;
+            sirenInt = setInterval(() => {
+                f = up ? f + 25 : f - 25;
+                if (f > 850) up = false; if (f < 350) up = true;
+                oscillator.frequency.setValueAtTime(f, audioCtx.currentTime);
+            }, 20);
+        }
+
+        function stopSiren() {
+            if (oscillator) { oscillator.stop(); oscillator.disconnect(); oscillator = null; }
+            clearInterval(sirenInt);
+        }
+
+        function stopAll() {
+            isActive = false;
+            document.body.classList.remove('danger');
+            statusLabel.innerText = "СКАНИРОВАНИЕ";
+            window.speechSynthesis.cancel();
+            stopSiren();
+            clearTimeout(this.rt);
+        }
+
+        // РЕАКЦИЯ НА ЗАЖАТИЕ (Только если режим SPACE)
+        const triggerStart = (e) => {
+            if (modes[currentMode] === 'SPACE' && !isActive) {
+                isActive = true; playCycle();
+            }
+        };
+        const triggerEnd = () => { if (modes[currentMode] === 'SPACE') stopAll(); };
+
+        touchZone.addEventListener('touchstart', triggerStart);
+        touchZone.addEventListener('touchend', triggerEnd);
+        touchZone.addEventListener('mousedown', triggerStart);
+        touchZone.addEventListener('mouseup', triggerEnd);
+        window.addEventListener('keydown', (e) => { if (e.code === 'Space') triggerStart(); });
+        window.addEventListener('keyup', (e) => { if (e.code === 'Space') triggerEnd(); });
+
+        function runRandom() {
+            if (modes[currentMode] !== 'RANDOM') return;
+            this.rt = setTimeout(() => {
+                isActive = true;
+                playCycle().then(() => { if (modes[currentMode] === 'RANDOM') { isActive = false; stopAll(); runRandom(); }});
+            }, Math.random() * 5000 + 4000);
+        }
+    </script>
+</body>
+</html>
