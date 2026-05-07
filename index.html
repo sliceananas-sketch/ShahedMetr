@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ШАХЕДОМЕТР v2.8 PRO</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;900&display=swap');
+        * { box-sizing: border-box; user-select: none; -webkit-tap-highlight-color: transparent; }
+        body { margin: 0; height: 100vh; display: flex; justify-content: center; align-items: center; background: #96b9f2; font-family: 'Montserrat', sans-serif; overflow: hidden; }
+        
+        .device-container { position: relative; width: 90vw; max-width: 380px; height: 85vh; }
+        
+        .antenna-group { position: absolute; top: -60px; right: 50px; z-index: 1; display: flex; flex-direction: column; align-items: center; }
+        .antenna-tip { width: 12px; height: 12px; background: #333; border-radius: 50%; margin-bottom: -2px; }
+        .antenna-rod { width: 6px; height: 60px; background: linear-gradient(90deg, #222, #444, #222); border-radius: 3px 3px 0 0; }
+        
+        .device { 
+            position: relative; width: 100%; height: 100%; background: #1e1e1e; 
+            border-radius: 40px; box-shadow: 0 20px 50px rgba(0,0,0,0.3), inset 0 0 15px rgba(255,255,255,0.05); 
+            padding: 30px; display: flex; flex-direction: column; z-index: 2; border: 2px solid #2a2a2a;
+        }
+
+        .screw { position: absolute; width: 14px; height: 14px; background: #333; border-radius: 50%; box-shadow: inset 0 2px 4px rgba(0,0,0,0.8), 0 1px 1px rgba(255,255,255,0.1); }
+        .screw::after { content: ''; position: absolute; top: 50%; left: 50%; width: 8px; height: 2px; background: #1a1a1a; transform: translate(-50%, -50%) rotate(45deg); border-radius: 1px; }
+        .tl { top: 15px; left: 15px; }
+        .tr { top: 15px; right: 15px; }
+        .bl { bottom: 15px; left: 15px; }
+        .br { bottom: 15px; right: 15px; }
+
+        .block { background: #111111; border-radius: 20px; margin-bottom: 15px; border: 1px solid #222; }
+        .header-block { padding: 15px; text-align: center; }
+        .header-text { color: white; font-weight: 900; font-size: 22px; letter-spacing: 1px; }
+        .version-text { color: #555; font-size: 10px; font-weight: 700; margin-top: 5px; }
+
+        .drone-display { height: 120px; display: flex; justify-content: center; align-items: center; background: radial-gradient(circle, #1a1a1a 0%, #0a0a0a 100%); }
+        .drone-svg { width: 80px; fill: #333; transition: fill 0.2s; filter: drop-shadow(0 0 5px rgba(0,0,0,0.5)); }
+        body.danger .drone-svg { fill: #ff3b3b; animation: shake 0.1s infinite; filter: drop-shadow(0 0 10px rgba(255,59,59,0.5)); }
+
+        .radar-block { padding: 15px; flex-grow: 1; display: flex; flex-direction: column; justify-content: space-between; }
+        .radar-label { color: #666; font-size: 10px; text-transform: uppercase; display: flex; justify-content: space-between; }
+        .led-container { display: flex; justify-content: space-between; align-items: center; height: 60px; }
+        .led { width: 5%; height: 25px; background: #222; border-radius: 5px; transition: 0.1s; }
+
+        .bottom-row { display: flex; gap: 15px; height: 120px; }
+        .dist-block { width: 60%; padding: 15px; display: flex; flex-direction: column; justify-content: center; }
+        .dist-label { color: #666; font-size: 9px; margin-bottom: 5px; }
+        .main-number { color: white; font-size: 48px; font-weight: 900; text-shadow: 0 0 10px rgba(255,255,255,0.1); }
+        
+        .controls-block { width: 40%; display: flex; flex-direction: column; gap: 10px; }
+        .btn { 
+            background: #333; color: white; border: none; border-radius: 15px; 
+            font-weight: 900; cursor: pointer; display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 4px 0 #1a1a1a; transition: 0.1s;
+        }
+        .btn:active { transform: translateY(2px); box-shadow: 0 2px 0 #1a1a1a; }
+        #mode-btn { height: 60px; font-size: 14px; background: #333; color: #fff; }
+        #settings-btn { height: 40px; color: #fff; background: #444; font-size: 20px; }
+        .mode-status { color: #00ff00; font-size: 10px; text-align: center; font-weight: bold; min-height: 12px; text-shadow: 0 0 5px rgba(0,255,0,0.5); }
+
+        #settings-menu {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.9);
+            width: 85%; background: #222; border-radius: 25px; padding: 20px;
+            z-index: 10; display: none; flex-direction: column; gap: 15px;
+            box-shadow: 0 0 50px rgba(0,0,0,0.8); border: 2px solid #444;
+        }
+        #settings-menu.active { display: flex; animation: pop 0.2s forwards; }
+        .setting-item { display: flex; flex-direction: column; gap: 5px; color: white; font-size: 12px; }
+        .social-btns { display: flex; gap: 10px; margin-top: 10px; }
+        .soc-btn { flex: 1; padding: 10px; font-size: 10px; background: #333; border-radius: 10px; color: white; text-decoration: none; text-align: center; font-weight: bold; border-bottom: 3px solid #1a1a1a; }
+
+        #flash { position: fixed; top:0; left:0; width:100%; height:100%; background: white; display: none; z-index: 100; }
+        #death { position: fixed; top:0; left:0; width:100%; height:100%; background: black; display: none; flex-direction: column; justify-content: center; align-items: center; z-index: 101; }
+        .death-msg { color: red; font-size: 32px; font-weight: 900; margin-bottom: 20px; text-align: center; }
+
+        @keyframes pop { to { transform: translate(-50%, -50%) scale(1); } }
+        @keyframes shake { 0% { transform: translate(1px, 1px); } 50% { transform: translate(-1px, -1px); } 100% { transform: translate(1px, 1px); } }
+    </style>
+</head>
+<body>
+
+    <div id="flash"></div>
+    <div id="death">
+        <div class="death-msg">УЕБАЛ ШАХЕД</div>
+        <button class="btn" style="padding: 15px 30px; min-width: 200px;" onclick="location.reload()">НАЧАТЬ ЗАНОВО</button>
+    </div>
+
+    <div class="device-container" id="ui">
+        <div class="antenna-group">
+            <div class="antenna-tip"></div>
+            <div class="antenna-rod"></div>
+        </div>
+        
+        <div id="settings-menu">
+            <div style="text-align: center; font-weight: 900; color: white; margin-bottom: 10px;">НАСТРОЙКИ</div>
+            <div class="setting-item">
+                <span>ГРОМКОСТЬ</span>
+                <input type="range" id="vol-slider" min="0" max="1" step="0.1" value="0.5">
+            </div>
+            <div class="setting-item">
+                <label style="display: flex; justify-content: space-between; align-items: center;">
+                    <span>ВИБРАЦИЯ</span>
+                    <input type="checkbox" id="vibro-switch" checked>
+                </label>
+            </div>
+            <div class="social-btns">
+                <a href="#" class="soc-btn" onclick="alert('Тут будет ссылка 1')">TELEGRAM</a>
+                <a href="#" class="soc-btn" onclick="alert('Тут будет ссылка 2')">TIKTOK</a>
+            </div>
+            <button class="btn" style="margin-top: 10px; padding: 10px; background: #ff3b3b;" onclick="toggleSettings()">ЗАКРЫТЬ</button>
+        </div>
+
+        <div class="device">
+            <div class="screw tl"></div>
+            <div class="screw tr"></div>
+            <div class="screw bl"></div>
+            <div class="screw br"></div>
+
+            <div class="block header-block">
+                <div class="header-text">UA ШАХЕДОМЕТР</div>
+                <div class="version-text">ШМ-v2.8 PRO | BY ANANASIK</div>
+            </div>
+
+            <div class="block drone-display">
+                <svg class="drone-svg" viewBox="0 0 100 50">
+                    <path d="M50,10 L45,25 L10,35 L10,40 L45,35 L50,45 L55,35 L90,40 L90,35 L55,25 Z" />
+                </svg>
+            </div>
+
+            <div class="block radar-block">
+                <div class="radar-label"><span>СКАНИРОВАНИЕ</span><span>🛰️</span></div>
+                <div class="led-container" id="leds"></div>
+                <div class="radar-label" style="font-size: 7px;"><span>MIN</span><span>MAX</span></div>
+            </div>
+
+            <div class="bottom-row">
+                <div class="block dist-block">
+                    <div class="dist-label">ДИСТАНЦИЯ (КМ)</div>
+                    <div class="main-number" id="dist-val">86</div>
+                    <div class="dist-label" style="font-size: 7px; margin-top:5px;">PRO-RADAR SYSTEM</div>
+                </div>
+                <div class="controls-block">
+                    <button class="btn" id="mode-btn">ОБРАТИ</button>
+                    <div class="mode-status" id="mode-txt">SPACE</div>
+                    <button class="btn" id="settings-btn" onclick="toggleSettings()">⚙</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+
+        let audioCtx, leds = [], currentDist = 86;
+        let isPressing = false, isExploded = false;
+        let volume = 0.5, vibroEnabled = true;
+        
+        let modes = ['SPACE', 'RANDOM', 'TURBO'];
+        let curModeIdx = 0;
+        let randomTarget = 0;
+
+        const distEl = document.getElementById('dist-val');
+        const modeTxt = document.getElementById('mode-txt');
+        const modeBtn = document.getElementById('mode-btn');
+        const ledsCont = document.getElementById('leds');
+        const volSlider = document.getElementById('vol-slider');
+        const vibroSwitch = document.getElementById('vibro-switch');
+
+        for (let i = 0; i < 15; i++) {
+            let l = document.createElement('div');
+            l.classList.add('led');
+            ledsCont.appendChild(l);
+            leds.push(l);
+        }
+
+        function toggleSettings() {
+            document.getElementById('settings-menu').classList.toggle('active');
+        }
+
+        modeBtn.onclick = () => {
+            curModeIdx = (curModeIdx + 1) % modes.length;
+            modeTxt.innerText = modes[curModeIdx];
+            if(modes[curModeIdx] === 'RANDOM') randomTarget = Math.random() * 80;
+        };
+
+        volSlider.oninput = (e) => { volume = e.target.value; };
+        vibroSwitch.onchange = (e) => { vibroEnabled = e.target.checked; };
+
+        function initAudio() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+
+        // ОБНОВЛЕННЫЙ ЗВУК ДОЗИМЕТРА (ГРОМЧЕ И РЕЗЧЕ)
+        function playSound(freq, duration = 0.005) {
+            if(!audioCtx || volume <= 0) return;
+            const o = audioCtx.createOscillator();
+            const g = audioCtx.createGain();
+            
+            o.type = 'sawtooth'; // Пилообразная волна для щелчка
+            o.connect(g); 
+            g.connect(audioCtx.destination);
+            
+            o.frequency.value = freq;
+            
+            const boost = 0.2 * volume; // Увеличенная громкость
+            g.gain.setValueAtTime(boost, audioCtx.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+            
+            o.start(); 
+            o.stop(audioCtx.currentTime + duration);
+        }
+
+        setInterval(() => {
+            if (isExploded) return;
+            let currentMode = modes[curModeIdx];
+            let shouldMoveForward = false;
+
+            if (currentMode === 'SPACE') {
+                shouldMoveForward = isPressing;
+            } else if (currentMode === 'TURBO') {
+                shouldMoveForward = true;
+            } else if (currentMode === 'RANDOM') {
+                if (currentDist > randomTarget) shouldMoveForward = true;
+                else if (Math.random() > 0.98) randomTarget = Math.random() * 90;
+            }
+
+            if (shouldMoveForward) {
+                if (currentDist > 0) {
+                    currentDist -= 1.8;
+                    playSound(150 + (100 - currentDist) * 5); // Частота растет при приближении
+                    document.body.classList.add('danger');
+                }
+            } else {
+                if (currentDist < 100) {
+                    currentDist += 1.2;
+                    document.body.classList.remove('danger');
+                }
+            }
+
+            currentDist = Math.max(0, Math.min(100, currentDist));
+            distEl.innerText = Math.floor(currentDist);
+            updateLeds();
+
+            if (currentDist === 0 && !isExploded) startFinalCountdown();
+        }, 50);
+
+        function updateLeds() {
+            let activeCount = Math.floor(((100 - currentDist) / 100) * 15);
+            leds.forEach((l, i) => {
+                if (i <= activeCount) {
+                    let color = i < 6 ? '#00ff00' : i < 11 ? '#ffff00' : '#ff0000';
+                    l.style.background = color;
+                    l.style.boxShadow = `0 0 10px ${color}`;
+                    l.style.height = (25 + Math.random() * 15) + 'px';
+                } else {
+                    l.style.background = '#222'; l.style.boxShadow = 'none'; l.style.height = '20px';
+                }
+            });
+        }
+
+        let sirenPlaying = false;
+        async function startFinalCountdown() {
+            if (sirenPlaying) return;
+            sirenPlaying = true;
+            const sOsc = audioCtx.createOscillator();
+            const sGain = audioCtx.createGain();
+            sOsc.type = 'sawtooth'; sOsc.connect(sGain); sGain.connect(audioCtx.destination);
+            sOsc.start();
+
+            let end = Date.now() + 5000;
+            while(Date.now() < end) {
+                if (modes[curModeIdx] === 'SPACE' && !isPressing) {
+                    sOsc.stop(); sirenPlaying = false; return;
+                }
+                sOsc.frequency.value = (Date.now() % 1000 > 500) ? 800 : 400;
+                sGain.gain.value = 0.1 * volume;
+                if (vibroEnabled && tg.HapticFeedback) tg.HapticFeedback.impactOccurred('heavy');
+                await new Promise(r => setTimeout(r, 100));
+            }
+            sOsc.stop();
+            doExplosion();
+        }
+
+        // ОБНОВЛЕННЫЙ ВЗРЫВ (ТИШЕ, ПЛАВНОЕ НАРАСТАНИЕ И ЗАТУХАНИЕ)
+        function doExplosion() {
+            isExploded = true;
+            document.getElementById('flash').style.display = 'block';
+            
+            if (volume > 0) {
+                const duration = 3.0;
+                const bufferSize = audioCtx.sampleRate * duration;
+                const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+                const data = buffer.getChannelData(0);
+                
+                // Создаем шум
+                for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+                
+                const noise = audioCtx.createBufferSource();
+                const filter = audioCtx.createBiquadFilter();
+                const g = audioCtx.createGain();
+                
+                noise.buffer = buffer;
+                filter.type = 'lowpass';
+                filter.frequency.value = 400; // Делаем взрыв глухим
+
+                noise.connect(filter);
+                filter.connect(g);
+                g.connect(audioCtx.destination);
+                
+                const now = audioCtx.currentTime;
+                const maxVol = 0.4 * volume; // Сниженная пиковая громкость
+
+                // ОГИБАЮЩАЯ: ТИХО -> ГРОМКО -> ТИХО
+                g.gain.setValueAtTime(0, now);
+                g.gain.linearRampToValueAtTime(maxVol, now + 0.2); // Плавное нарастание за 200мс
+                g.gain.exponentialRampToValueAtTime(0.0001, now + duration); // Длинное затухание
+                
+                noise.start(now);
+                noise.stop(now + duration);
+            }
+            
+            setTimeout(() => {
+                document.getElementById('ui').style.display = 'none';
+                document.getElementById('flash').style.background = 'black';
+                setTimeout(() => { document.getElementById('death').style.display = 'flex'; }, 400);
+            }, 100);
+        }
+
+        const triggerIn = (e) => { 
+            if(e.target.closest('#settings-menu') || e.target.closest('#settings-btn') || e.target.closest('#mode-btn')) return;
+            initAudio(); isPressing = true; 
+        };
+        const triggerOut = () => { isPressing = false; };
+
+        window.addEventListener('keydown', (e) => { if(e.code === 'Space') triggerIn(e); });
+        window.addEventListener('keyup', (e) => { if(e.code === 'Space') triggerOut(); });
+        document.addEventListener('mousedown', (e) => { if(e.button === 0) triggerIn(e); });
+        document.addEventListener('mouseup', triggerOut);
+        document.addEventListener('touchstart', (e) => { triggerIn(e); });
+        document.addEventListener('touchend', triggerOut);
+    </script>
+</body>
+</html>
